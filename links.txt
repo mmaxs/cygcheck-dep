@@ -1,0 +1,3 @@
+https://sourceware.org/cygwin-apps/package-upload.html
+ftp://sourceware.org/pub/cygwin/x86/release/cygcheck-dep/
+ftp://sourceware.org/pub/cygwin/x86_64/release/cygcheck-dep/
