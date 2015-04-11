@@ -1,2 +1,2 @@
 # cygcheck-dep
-A script for use with Cygwin project (http://cygwin.com)
+A script for use with the Cygwin project (http://cygwin.com)
