@@ -1,21 +1,21 @@
 #! /bin/bash
 #
-# cygcheck-dep, GNU General Public License
-# Copyright (c) 2013-2015 Mikhail Usenko <mikeus@nm.ru>
+# cygcheck-dep
+# GNU General Public License
+# Copyright (c) 2013-2018 Mikhail Usenko <mikeus@nm.ru>
 #
 # https://github.com/mmaxs/cygcheck-dep
 #
 
 
+### DECLARATIONS
+
 name="cygcheck-dep"
-version="2.1"
+version="3.0"
 
-tag_cygwin="cygwin/"
-tag_cygwinports="cygwinports/"
-tag_extra="extra/"
 
-####### version(), help() /*
-#######
+## version(), help() /*
+
 version()
 {
   echo "$name, version $version"
@@ -33,70 +33,117 @@ Usage:
   $name [-h | --help]
   $name [-V | --version]
 
-Options:
- (Setup diagnostic)
+Setup diagnostics switches:
   -l              Check for installed packages that are not required by any
-                   other installed packages (that are "leaves" in the package
-                   dependency tree).
+                  other installed packages (that are "leaves" in the package
+                  dependency tree).
+
   -i              Check for package "islands". "An island" is a group of
-                   interdependent packages that require each other (with
-                   circular or all-to-all relationships) but being taken
-                   all together not needed by any other installed packages.
+                  interdependent packages that require each other (with
+                  circular or all-to-all dependencies), but being taken
+                  all together not needed by any other installed packages.
+
   -I              Show all groups of interdependent packages with circular
-                   or all-to-all relationships (including groups that are
-                   not "islands"). Supersedes -i.
-  -b              Show a list of installed packages that have broken
-                   or unknown dependencies. Implies -q.
-  -f              Show a list of installed packages that have phantom
-                   dependencies (nonpresent packages likely renamed/retired
-                   /etc.) specified in the setup.ini file. Implies -q.
- (Package information)
-  -r PACKAGE...   Show packages that required by the PACKAGE(s).
-                   (This is the same list that specified in "requires:" line
-                   in the setup.ini file for the PACKAGE except for broken
-                   and phantom dependencies.)
-  -R PACKAGE...   Recursively resolve a list of packages that required by the
-                   PACKAGE(s).
-  -n PACKAGE...   Show packages that need the PACKAGE(s).
-  -N PACKAGE...   Recursively resolve a list of packages that need the
-                   PACKAGE(s).
- (Cygwin Ports setup support)
-  -p              Turn on the Cygwin Ports collection support.
-  -o              List installed packages that have overridden versions in
-                   the Cygwin Ports collection. Implies -p, -q.
- (Modifiers)
-  -c              Normally every time $name runs it downloads
-                   latest Cygwin package database file (setup.ini) with
-                   information on package dependencies from Cygwin ftp site.
-                   This option prevents from unnecessary downloads and
-                   forces to use the file cached from the previous download.
+                  or all-to-all dependencies (including groups that are
+                  not "islands"). Supersedes -i switch.
+
+  -b              Show installed packages that have broken or unknown
+                  dependencies along with lists of missing required packages
+                  for them, which might include as available, but not
+                  installed dependecies, as well as unknown package names.
+                  (When -O option is specified, the list of missing required
+                  packages might also contain obsoleted packages.)
+
+  -o              Show installed packages that are obsoleted by available
+                  replacing package.
+
+  -x              Show extraneous installed packages that are not present in
+                  the Cygwin standard distribution whose dependencies can not
+                  therefore be figured out from <setup.ini> file.
+
+Package information switches:
+  -r PACKAGE...   Show the list of packages that are required by the
+                  PACKAGE. (With -O option this is the very same list that
+                  specified in "requires:" line in <setup.ini> file for the
+                  PACKAGE. If no -O option is specified, this is the list of
+                  packages that <setup.exe> would install along with the
+                  PACKAGE as its required dependencies.)
+
+  -R PACKAGE...   Recursively resolve the list of packages that are required
+                  by the PACKAGE.
+
+  -n PACKAGE...   Show the packages that need the PACKAGE. (Without -O option
+                  being specified, obsoleted packages are considered as being
+                  not needed for anyone, so resulting in an empty list.)
+
+  -N PACKAGE...   Recursively resolve the list of packages that need the
+                  PACKAGE.
+
+  -u PACKAGE...
+
+  -U PACKAGE...
+
+Run mode options:
+  -c              Normally every time $name runs, it downloads latest
+                  Cygwin package database file <setup.ini> with information
+                  on package dependencies from Cygwin's ftp site. This option
+                  prevents from unnecessary downloads and forces to use the
+                  file cached at the previous run.
+
+  -O              Respect obsoleted packages. Affects on all setup diagnostics
+                  and package information switches.
+
   -s FILE         Normally $name shows information on the installed
-                   packages for the Cygwin installation you are working in
-                   (the list of installed packages is /etc/setup/installed.db).
-                   With this option you may specify a different source for
-                   a database FILE of installed packages (e.g. the file
-                   from another Cygwin installation on your system).
-  -S              Instead of checking through only installed packages use
-                   the list of all available packages from the setup.ini file
-                   from the Cygwin standard distribution (and from the Cygwin
-                   Ports collection if its support has been turned on).
-                   In other words it will be treated as if all the available
-                   packages from the package database are installed.
-                   Supersedes -s. (Be aware it may take long time with other
-                   options: more than 50 sec.)
- (Other)
-  -x              Print package names prefixed with the tag of their
-                   distribution: '$tag_cygwin', '$tag_cygwinports', or '$tag_extra'.
-  -v              Be more verbose: turn on Wget's output (to stderr) while
-                   downloading setup.ini file.
-  -q              Be more quiet: suppress the warnings on phantom dependencies
-                   (nonpresent packages likely renamed/retired/etc.) specified
-                   in the setup.ini file and on broken/unknown dependencies.
-  -h, --help      Print this help to stdout and exit.
-  -V, --version   Print the program version to stdout and exit.
+                  packages for the Cygwin installation you are working in (the
+                  list of installed packages is </etc/setup/installed.db>).
+                  With this option you may specify a different database FILE
+                  of the installed packages (e.g. the file from another Cygwin
+                  installation on your system).
+
+<setup.ini> file diagnostics switches:
+  -S              Instead of checking through only installed packages, use
+                  the list of all available packages from <setup.ini> file.
+                  In other words, it will be treated as if all the available
+                  packages from the package database (excluding obsoleted
+                  ones, when no -O option is specified) have been installed.
+                  Supersedes -s. (Be aware it may take long time with other
+                  switches: more than 50 sec.)
+
+Output modifiers:
+  -v              Be more verbose: turn on Wget's output to /dev/stderr while
+                  downloading <setup.ini> file.
+
+  -q              Be more quiet, suppress advance warnings:
+                  - about ill-defined or ambiguous records encountered while
+                    reading from <setup.ini> file (the packages with unknown
+                    names in required dependencies, likely renamed/retired/
+                    misspelled packages; the multiple available replacing
+                    packages for obsoleted ones, etc.).
+                  - about misleading results because of broken or unknown
+                    dependencies for installed packages.
+                  - about extraneous installed packages whose dependencies
+                    therefore are unknown.
+
+Other switches:
+  -h, --help      Print this help and exit.
+  -V, --version   Print the program version and exit.
 $
 }
-####### */
+## */
+
+
+
+
+
+### SCRIPT
+
+
+
+
+
+tag_cygwin="cygwin/"
+tag_cygwinports="cygwinports/"
+tag_extra="extra/"
 
 ####### processing of the command-line options /*
 #######
@@ -195,6 +242,7 @@ while getopts "xvqcs:SpoliIbfrRnN-:hV" OPT; do
 done
 ####### */
 
+exit
 ####### checking for the cache directory /*
 #######
 cache_dir="/var/cache/$name"
