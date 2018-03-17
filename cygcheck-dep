@@ -28,8 +28,8 @@ help()
 Show information on dependencies for installed Cygwin packages.
 
 Usage:
-  $name [-c] [-s FILE | -S] [-p] [-l] [-i | -I] [-o] [-b] [-f]
-  $name [-c] [-s FILE | -S] [-p] [[-r] [-R] [-n] [-N] [PACKAGE...]]
+  $name [-c] [-O] [-s FILE | -S] [:setup diagnostics switches:]
+  $name [-c] [-O] [-s FILE | -S] [:package information switches:]
   $name [-h | --help]
   $name [-V | --version]
 
@@ -41,7 +41,7 @@ Setup diagnostics switches:
   -i              Check for package "islands". "An island" is a group of
                   interdependent packages that require each other (with
                   circular or all-to-all dependencies), but being taken
-                  all together not needed by any other installed packages.
+                  all together not needed for any other installed packages.
 
   -I              Show all groups of interdependent packages with circular
                   or all-to-all dependencies (including groups that are
@@ -58,7 +58,7 @@ Setup diagnostics switches:
                   replacing package.
 
   -x              Show extraneous installed packages that are not present in
-                  the Cygwin standard distribution whose dependencies can not
+                  Cygwin standard distribution whose dependencies can not
                   therefore be figured out from <setup.ini> file.
 
 Package information switches:
@@ -72,16 +72,21 @@ Package information switches:
   -R PACKAGE...   Recursively resolve the list of packages that are required
                   by the PACKAGE.
 
-  -n PACKAGE...   Show the packages that need the PACKAGE. (Without -O option
-                  being specified, obsoleted packages are considered as being
-                  not needed for anyone, so resulting in an empty list.)
+  -n PACKAGE...   Show the list of packages that need the PACKAGE.
+                  (Without -O option being specified, obsoleted packages are
+                  considered as being not needed for anyone, so resulting in
+                  an empty list.)
 
   -N PACKAGE...   Recursively resolve the list of packages that need the
                   PACKAGE.
 
-  -u PACKAGE...
+  -u PACKAGE...   Show the list of packages that will become not required by
+                  any other installed packages (i.e. will become "leaves"),
+                  if the PACKAGE is uninstalled. Thus, these packages,
+                  if being unnecessary, can be selected for uninstalling
+                  in <setup.exe> together with the PACKAGE.
 
-  -U PACKAGE...
+  -U PACKAGE...   The recursive version of -u switch.
 
 Run mode options:
   -c              Normally every time $name runs, it downloads latest
@@ -138,85 +143,63 @@ $
 ### SCRIPT
 
 
+## parse command-line options /*
+opt_more_verbose=''
+opt_more_quiet=''
+opt_use_cached=''
+opt_respect_obsoleted=''
+opt_installed_db=''
+opt_all_installed=''
+opt_show_leaves=''
+opt_show_islands=''
+opt_show_interdependent=''
+opt_show_broken=''
+opt_show_obsoleted=''
+opt_show_extra=''
+opt_show_required=''
+opt_resolve_required=''
+opt_show_dependent=''
+opt_resolve_dependent=''
+opt_show_new_leaves=''
+opt_resolve_new_leaves=''
 
-
-
-tag_cygwin="cygwin/"
-tag_cygwinports="cygwinports/"
-tag_extra="extra/"
-
-####### processing of the command-line options /*
-#######
-opt_print_src_tag=""
-opt_quiet_wget="-q"
-opt_suppress_unneeded_warns=""
-opt_use_cached=""
-opt_installed_db=""
-opt_treat_all_packages=""
-opt_show_leaves=""
-opt_show_islands=""
-opt_show_interdependent=""
-opt_show_broken=""
-opt_show_phantom=""
-opt_show_required=""
-opt_resolve_required=""
-opt_show_dependent=""
-opt_resolve_dependent=""
-opt_with_ports=""
-opt_show_overridden=""
-f_dependencies_be_necessary=""
-f_nonleaves_be_necessary=""
-while getopts "xvqcs:SpoliIbfrRnN-:hV" OPT; do
+while getopts "vqcOs:SliIboxrRnNuU-:hV" OPT; do
   case "$OPT" in
-    x)  opt_print_src_tag="yes"
+    v)  opt_more_verbose="yes"
         ;;
-    v)  opt_quiet_wget=""
-        ;;
-    q)  opt_suppress_unneeded_warns="yes"
+    q)  opt_more_quiet="yes"
         ;;
     c)  opt_use_cached="yes"
         ;;
+    O)  opt_respect_obsoleted="yes"
+        ;;
     s)  opt_installed_db="$OPTARG"
         ;;
-    S)  opt_treat_all_packages="yes"
-        ;;
-    p)  opt_with_ports="yes"
-        ;;
-    o)  opt_show_overridden="yes"
-        opt_with_ports="yes"
-        opt_suppress_unneeded_warns="yes"
+    S)  opt_all_installed="yes"
         ;;
     l)  opt_show_leaves="yes"
-        f_dependencies_be_necessary="yes"
-        f_nonleaves_be_necessary="yes"
         ;;
     i)  opt_show_islands="yes"
-        f_dependencies_be_necessary="yes"
-        f_nonleaves_be_necessary="yes"
         ;;
     I)  opt_show_interdependent="yes"
-        f_dependencies_be_necessary="yes"
-        f_nonleaves_be_necessary="yes"
         ;;
-    b)  opt_show_broken=yes
-        opt_suppress_unneeded_warns="yes"
-        f_dependencies_be_necessary="yes"
+    b)  opt_show_broken="yes"
         ;;
-    f)  opt_show_phantom="yes"
-        opt_suppress_unneeded_warns="yes"
-        f_dependencies_be_necessary="yes"
+    o)  opt_show_obsoleted="yes"
+        ;;
+    x)  opt_show_extra="yes"
         ;;
     r)  opt_show_required="yes"
-        f_dependencies_be_necessary="yes"
         ;;
     R)  opt_resolve_required="yes"
-        f_dependencies_be_necessary="yes"
         ;;
     n)  opt_show_dependent="yes"
-        f_dependencies_be_necessary="yes"
         ;;
     N)  opt_resolve_dependent="yes"
-        f_dependencies_be_necessary="yes"
+        ;;
+    u)  opt_show_new_leaves="yes"
+        ;;
+    U)  opt_resolve_new_leaves="yes"
         ;;
     -)  case "$OPTARG" in
              help)  help
@@ -240,113 +223,70 @@ while getopts "xvqcs:SpoliIbfrRnN-:hV" OPT; do
         ;;
   esac
 done
-####### */
+## */
 
-exit
-####### checking for the cache directory /*
-#######
+## check for the cache directory /*
 cache_dir="/var/cache/$name"
 [ -d "$cache_dir" ] ||
 if ! mkdir -p "$cache_dir"; then
   echo >&2 "$0: unable to create cache directory"
-  echo >&2 "$0: ($cache_dir)"
+  echo >&2 "$0: <$cache_dir>"
   exit 2
 fi
-####### */
+## */
 
-####### checking for the installed.db file /*
-#######
+## check for the <installed.db> file /*
 installed_db="${opt_installed_db:-/etc/setup/installed.db}"
-if ! [ "$opt_treat_all_packages" ]; then
-  if ! [ -r "$installed_db" ]; then
-    echo >&2 "$0: installed.db file is not exist or is not readable"
-    echo >&2 "$0: ($installed_db)"
-    exit 3
-  fi
+[ "$opt_all_installed" ] ||
+if ! [ -r "$installed_db" ]; then
+  echo >&2 "$0: <installed.db> file is not exist or is not readable"
+  echo >&2 "$0: <$installed_db>"
+  exit 3
 fi
-####### */
+## */
 
-####### getting the target architecture /*
-#######
-  mach="${MACHTYPE%%-*}"
+## identify the host architecture /*
 # mach="$(uname -m)"
+mach="${MACHTYPE%%-*}"
 [ "$mach" = "x86_64" ] || mach="x86"
-####### */
+## */
 
-####### downloading the setup.ini files /*
-# cygwin /*
+## download <setup.ini> file /*
 cw_setup_ini="$cache_dir/cygwin/$mach/setup.ini"
 if ! [ "$opt_use_cached" ]; then
   cw_setup_bz2_url="ftp://sourceware.org/pub/cygwin/$mach/setup.bz2"
-  if ! wget >&2 $opt_quiet_wget -r -nH --cut-dirs 1 -P "$cache_dir" "$cw_setup_bz2_url"; then
-    echo >&2 "$0: Cygwin standard distribution:"
-    echo >&2 "$0: failed to download setup.ini"
-    echo >&2 "$0: check your internet connection"
-    echo >&2 "$0: or try -c option to use cached file from previous download"
+  [ "$opt_more_verbose" ] && opt_wget_output="-nv" || opt_wget_output="-q"
+  if ! wget >&2 "$opt_wget_output" -r -nH --cut-dirs 1 -P "$cache_dir" "$cw_setup_bz2_url"; then
+    echo >&2 "$0: failed to download <setup.ini> file"
+    echo >&2 "$0: <$cw_setup_bz2_url>"
+    echo >&2 "$0: you may try to run with -c option to use cached file from previous download"
     exit 4
   fi
   cw_setup_bz2="$cache_dir/cygwin/$mach/setup.bz2"
   if ! bzip2 -t "$cw_setup_bz2"; then
-    echo >&2 "$0: Cygwin standard distribution:"
-    echo >&2 "$0: failed to check integrity of downloaded setup.ini"
-    echo >&2 "$0: ($cw_setup_bz2)"
-    echo >&2 "$0: you may try -c option to use cached file from previous download"
+    echo >&2 "$0: failed to check integrity of downloaded <setup.ini> file"
+    echo >&2 "$0: <$cw_setup_bz2>"
+    echo >&2 "$0: you may try to run with -c option to use cached file from previous download"
     exit 5
   fi
   if ! bzcat "$cw_setup_bz2" > "$cw_setup_ini"; then
-    echo >&2 "$0: Cygwin standard distribution:"
-    echo >&2 "$0: failed to decompress downloaded setup.ini"
-    echo >&2 "$0: ($cw_setup_bz2 -> $cw_setup_ini)"
+    echo >&2 "$0: failed to decompress downloaded <setup.ini> file"
+    echo >&2 "$0: <$cw_setup_bz2>"
     exit 6
   fi
 fi
 if ! [ -r "$cw_setup_ini" ]; then
-  echo >&2 "$0: Cygwin standard distribution:"
-  echo >&2 "$0: setup.ini file is not exist or is not readable"
-  echo >&2 "$0: ($cw_setup_ini)"
+  echo >&2 "$0: <setup.ini> file is not exist or is not readable"
+  echo >&2 "$0: <$cw_setup_ini>"
   [ "$opt_use_cached" ] &&
-  echo >&2 "$0: try to run without -c option to download the file"
+  echo >&2 "$0: you may try to run without -c option to download the file"
   exit 7
 fi
-# */
-# cigwinports /*
-if [ "$opt_with_ports" ]; then
-  cwp_setup_ini="$cache_dir/cygwinports/$mach/setup.ini"
-  if ! [ "$opt_use_cached" ]; then
-    cwp_setup_bz2_url="ftp://sourceware.org/pub/cygwinports/$mach/setup.bz2"
-    if ! wget >&2 $opt_quiet_wget -r -nH --cut-dirs 1 -P "$cache_dir" "$cwp_setup_bz2_url"; then
-      echo >&2 "$0: Cygwin Ports collection:"
-      echo >&2 "$0: failed to download setup.ini"
-      echo >&2 "$0: check your internet connection"
-      echo >&2 "$0: or try -c option to use cached file from previous download"
-      exit 8
-    fi
-    cwp_setup_bz2="$cache_dir/cygwinports/$mach/setup.bz2"
-    if ! bzip2 -t "$cwp_setup_bz2"; then
-      echo >&2 "$0: Cygwin Ports collection:"
-      echo >&2 "$0: failed to check integrity of downloaded setup.ini"
-      echo >&2 "$0: ($cwp_setup_bz2)"
-      echo >&2 "$0: you may try -c option to use cached file from previous download"
-      exit 9
-    fi
-    if ! bzcat "$cwp_setup_bz2" > "$cwp_setup_ini"; then
-      echo >&2 "$0: Cygwin Ports collection:"
-      echo >&2 "$0: failed to decompress downloaded setup.ini"
-      echo >&2 "$0: ($cwp_setup_bz2 -> $cwp_setup_ini)"
-      exit 10
-    fi
-  fi
-  if ! [ -r "$cwp_setup_ini" ]; then
-    echo >&2 "$0: Cygwin Ports collection:"
-    echo >&2 "$0: setup.ini file is not exist or is not readable"
-    echo >&2 "$0: ($cwp_setup_ini)"
-    [ "$opt_use_cached" ] &&
-    echo >&2 "$0: try to run without -c option to download the file"
-    exit 11
-  fi
-fi
-# */
-####### */
+## */
+
+
+exit
+
 
 ####### declaring global variables /*
 #######
