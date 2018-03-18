@@ -28,8 +28,8 @@ help()
 Show information on dependencies for installed Cygwin packages.
 
 Usage:
-  $name [-c] [-O] [-s FILE | -S] [:setup diagnostics switches:]
-  $name [-c] [-O] [-s FILE | -S] [:package information switches:]
+  $name [-c] [-s FILE | -S] [:setup diagnostics switches:]
+  $name [-c] [-s FILE | -S] [:package information switches:]
   $name [-h | --help]
   $name [-V | --version]
 
@@ -49,10 +49,9 @@ Setup diagnostics switches:
 
   -b              Show installed packages that have broken or unknown
                   dependencies along with lists of missing required packages
-                  for them, which might include as available, but not
-                  installed dependecies, as well as unknown package names.
-                  (When -O option is specified, the list of missing required
-                  packages might also contain obsoleted packages.)
+                  for them (which might include not only available but for
+                  some reason not installed dependecies, but also merely
+                  unknown package names).
 
   -o              Show installed packages that are obsoleted by available
                   replacing package.
@@ -62,23 +61,16 @@ Setup diagnostics switches:
                   therefore be figured out from <setup.ini> file.
 
 Package information switches:
-  -r PACKAGE...   Show the list of packages that are required by the
-                  PACKAGE. (With -O option this is the very same list that
-                  specified in "requires:" line in <setup.ini> file for the
-                  PACKAGE. If no -O option is specified, this is the list of
-                  packages that <setup.exe> would install along with the
-                  PACKAGE as its required dependencies.)
+  -r PACKAGE...   Show the list of packages that are required by the installed
+                  PACKAGE.
 
   -R PACKAGE...   Recursively resolve the list of packages that are required
-                  by the PACKAGE.
+                  by the installed PACKAGE.
 
-  -n PACKAGE...   Show the list of packages that need the PACKAGE.
-                  (Without -O option being specified, obsoleted packages are
-                  considered as being not needed for anyone, so resulting in
-                  an empty list.)
+  -n PACKAGE...   Show the list of packages that need the installed PACKAGE.
 
   -N PACKAGE...   Recursively resolve the list of packages that need the
-                  PACKAGE.
+                  installed PACKAGE.
 
   -u PACKAGE...   Show the list of packages that will become not required by
                   any other installed packages (i.e. will become "leaves"),
@@ -95,9 +87,6 @@ Run mode options:
                   prevents from unnecessary downloads and forces to use the
                   file cached at the previous run.
 
-  -O              Respect obsoleted packages. Affects on all setup diagnostics
-                  and package information switches.
-
   -s FILE         Normally $name shows information on the installed
                   packages for the Cygwin installation you are working in (the
                   list of installed packages is </etc/setup/installed.db>).
@@ -109,25 +98,36 @@ Run mode options:
   -S              Instead of checking through only installed packages, use
                   the list of all available packages from <setup.ini> file.
                   In other words, it will be treated as if all the available
-                  packages from the package database (excluding obsoleted
-                  ones, when no -O option is specified) have been installed.
-                  Supersedes -s. (Be aware it may take long time with other
-                  switches: more than 50 sec.)
+                  packages from the package database have been installed
+                  (excluding obsoleted ones if no -O option is specified).
+                  Supersedes -s option. (Be aware it may take long time with
+                  other switches: more than 50 sec.)
+
+  -O              Respect obsoleted packages when processing -S switch:
+                  treat obsoleted packages as having been also installed
+                  (so this will affect on all setup diagnostics and package
+                  information switches).
+                  -b (When -O option is specified, the list of missing required packages might also contain obsoleted packages.)
+                  -r (With -O option this is the very same list that
+                  specified in "requires:" line in <setup.ini> file for the
+                  PACKAGE. If no -O option is specified, this is the list of
+                  packages that <setup.exe> would install along with the
+                  PACKAGE as its required dependencies.)
+                  -n (Without -O option being specified, obsoleted packages are considered as being not needed for anyone, so resulting in  an empty list.)
 
 Output modifiers:
+  -p              While printing package names do not prefix them with status
+                  marks. Status marks are:
+                    ! - installed package with broken dependencies,
+                    * - extraneous installed package,
+                    % - obselete installed package,
+                    ? - unknown package name.
+
+  -q              Be more quiet: suppress any advance warnings.
+
   -v              Be more verbose: turn on Wget's output to /dev/stderr while
                   downloading <setup.ini> file.
 
-  -q              Be more quiet, suppress advance warnings:
-                  - about ill-defined or ambiguous records encountered while
-                    reading from <setup.ini> file (the packages with unknown
-                    names in required dependencies, likely renamed/retired/
-                    misspelled packages; the multiple available replacing
-                    packages for obsoleted ones, etc.).
-                  - about misleading results because of broken or unknown
-                    dependencies for installed packages.
-                  - about extraneous installed packages whose dependencies
-                    therefore are unknown.
 
 Other switches:
   -h, --help      Print this help and exit.
@@ -229,8 +229,8 @@ done
 cache_dir="/var/cache/$name"
 [ -d "$cache_dir" ] ||
 if ! mkdir -p "$cache_dir"; then
-  echo >&2 "$0: unable to create cache directory"
-  echo >&2 "$0: <$cache_dir>"
+  echo >&2 "$0: unable to create cache directory:"
+  echo >&2 "$0:   <$cache_dir>"
   exit 2
 fi
 ## */
@@ -239,8 +239,8 @@ fi
 installed_db="${opt_installed_db:-/etc/setup/installed.db}"
 [ "$opt_all_installed" ] ||
 if ! [ -r "$installed_db" ]; then
-  echo >&2 "$0: <installed.db> file is not exist or is not readable"
-  echo >&2 "$0: <$installed_db>"
+  echo >&2 "$0: <installed.db> file is not exist or is not readable:"
+  echo >&2 "$0:   <$installed_db>"
   exit 3
 fi
 ## */
@@ -255,29 +255,29 @@ mach="${MACHTYPE%%-*}"
 cw_setup_ini="$cache_dir/cygwin/$mach/setup.ini"
 if ! [ "$opt_use_cached" ]; then
   cw_setup_bz2_url="ftp://sourceware.org/pub/cygwin/$mach/setup.bz2"
-  [ "$opt_more_verbose" ] && opt_wget_output="-nv" || opt_wget_output="-q"
-  if ! wget >&2 "$opt_wget_output" -r -nH --cut-dirs 1 -P "$cache_dir" "$cw_setup_bz2_url"; then
-    echo >&2 "$0: failed to download <setup.ini> file"
-    echo >&2 "$0: <$cw_setup_bz2_url>"
+  [ "$opt_more_verbose" ] && opt_wget_verbosity="-nv" || opt_wget_verbosity="-q"
+  if ! wget >&2 "$opt_wget_verbosity" -r -nH --cut-dirs 1 -P "$cache_dir" "$cw_setup_bz2_url"; then
+    echo >&2 "$0: failed to download <setup.ini> file:"
+    echo >&2 "$0:   <$cw_setup_bz2_url>"
     echo >&2 "$0: you may try to run with -c option to use cached file from previous download"
     exit 4
   fi
   cw_setup_bz2="$cache_dir/cygwin/$mach/setup.bz2"
   if ! bzip2 -t "$cw_setup_bz2"; then
-    echo >&2 "$0: failed to check integrity of downloaded <setup.ini> file"
-    echo >&2 "$0: <$cw_setup_bz2>"
+    echo >&2 "$0: failed to check integrity of downloaded <setup.ini> file:"
+    echo >&2 "$0:   <$cw_setup_bz2>"
     echo >&2 "$0: you may try to run with -c option to use cached file from previous download"
     exit 5
   fi
   if ! bzcat "$cw_setup_bz2" > "$cw_setup_ini"; then
-    echo >&2 "$0: failed to decompress downloaded <setup.ini> file"
-    echo >&2 "$0: <$cw_setup_bz2>"
+    echo >&2 "$0: failed to decompress downloaded <setup.ini> file:"
+    echo >&2 "$0:   <$cw_setup_bz2>"
     exit 6
   fi
 fi
 if ! [ -r "$cw_setup_ini" ]; then
-  echo >&2 "$0: <setup.ini> file is not exist or is not readable"
-  echo >&2 "$0: <$cw_setup_ini>"
+  echo >&2 "$0: <setup.ini> file is not exist or is not readable:"
+  echo >&2 "$0:   <$cw_setup_ini>"
   [ "$opt_use_cached" ] &&
   echo >&2 "$0: you may try to run without -c option to download the file"
   exit 7
