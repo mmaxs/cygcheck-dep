@@ -119,14 +119,14 @@ Run mode options:
                   -n (Without -O option being specified, obsoleted packages are considered as being not needed for anyone, so resulting in  an empty list.)
 
 Output modifiers:
-  -p              While printing package names do not prefix them with status
-                  marks. Status marks are:
+  -p              While printing package names prefix them with status marks.
+                  Status marks are:
                     ?? - unknown package name,
                     ?  - extraneous installed package,
-                    %  - obselete installed package,
+                    &  - obselete installed package,
                     !  - installed package with broken dependencies,
-                    !! - not installed package (broken dependency);
-                  (! and % marks might be juxtaposed).
+                    *  - not installed package (broken dependency);
+                  (! and & marks might be juxtaposed).
 
   -q              Be more quiet: suppress any advance warnings.
 
@@ -269,9 +269,10 @@ nout()
   local -a t
 
   for pp; do for p in $pp; do t["$p"]="$p"; done; done
+  pp=''
 
   for p in "${!t[@]}"; do
-    if ! [ "$opt_no_prefix" ]; then
+    if [ "$opt_use_prefix" ]; then
       pp=''
       if [ "${UnknownPkgs[$p]}" ]; then
         pp+='??'
@@ -280,10 +281,10 @@ nout()
           pp+='?'
         else
           [ "${PkgBrokenRequisites[$p]}" ] && pp+='!'
-          [ "${ObsoletePkgs[$p]}" ] && pp+='%'
+          [ "${ObsoletePkgs[$p]}" ] && pp+='&'
         fi
       else
-        pp+='!!'
+        pp+='*'
       fi
     fi
     echo -n " $pp${PkgName[$p]}"
@@ -357,7 +358,7 @@ opt_use_cached_setup_ini=''
 opt_use_custom_installed_db=''
 opt_treat_setup_ini_as_installed=''
 opt_respect_obsoleted=''
-opt_no_prefix=''
+opt_use_prefix=''
 opt_be_more_quiet=''
 opt_be_more_verbose=''
 
@@ -397,7 +398,7 @@ while getopts "liIboxCrRnNuUcs:SOpqv-:hV" OPT; do
         ;;
     O)  opt_respect_obsoleted="yes"
         ;;
-    p)  opt_no_prefix="yes"
+    p)  opt_use_prefix="yes"
         ;;
     q)  opt_be_more_quiet="yes"
         ;;
@@ -495,106 +496,10 @@ fi
 # $P $C $R $V $O $D $T - temporary
 L=''; P=''; C=''; R=''; V=''; O=''; D=''; T=''
 
-#/*
-#while :; do
-#  while :; do
-#    case "$L" in
-#                @\ *) [ "$P" ] && break
-#                      P="${L#@ }"
-#                      ;;
-#        category:\ *) [ "$T" ] || C="${L#category: }"
-#                      ;;
-#        requires:\ *) [ "$T" ] || R="${L#requires: }"
-#                      ;;
-#         version:\ *) [ "$T" ] || V="${L#version: }"
-#                      ;;
-#       obsoletes:\ *) [ "$T" ] || O="${L#obsoletes: }"
-#                      ;;
-#        depends2:\ *) [ "$T" ] || D="${L#depends2: }"
-#                      ;;
-#           \[prev\]*) T="[prev]"
-#                      ;;
-#           \[test\]*) T="[test]"
-#    esac
-#    L=''
-#    IFS='' read -r L
-#    [ "$L" ] || break
-#  done
-#
-#  add_new_package_to_catalogue "$P"
-#  if [ "$C" ]; then
-#    __prepare_list C "$C"
-#    PkgCategories[$MaxPkgID]="$C"
-#  fi
-#  if [ "$R" ]; then
-#    __prepare_list R "$R"
-#    PkgRequisitesDeclared[$MaxPkgID]="$R"
-#  fi
-#  PkgVersionAvailable[$MaxPkgID]="${V// }"
-#  if [ "$O" ]; then
-#    __prepare_list O "$O" ","
-#    PkgObsoletedPkgs[$MaxPkgID]="$O"
-#  fi
-#  if [ "$D" ]; then
-#    if __find_in_list "$C" "_obsolete"; then
-#      __prepare_list D "$D" ","
-#      ObsoletePkgs[$MaxPkgID]="$D"
-#    fi
-#  fi
-#
-#  P=''; C=''; R=''; V=''; O=''; D=''; T=''
-#  [ "$L" ] || break
-#done < <(sed -n '/^@ /p; /^category: /p; /^requires: /p; /^version: /p; /^obsoletes: /p; /^\[prev\]/p' "$cw_setup_ini")
-#*/
-#/*
-#while IFS='' read -r L || [ "$L" ]; do
-#  case "$L" in
-#              @\ *) T=''
-#                    P="${L#@ }"
-#                    add_new_package_to_catalogue "$P"
-#                    ;;
-#      category:\ *) if ! [ "$T" ]; then
-#                      C="${L#category: }"
-#                      __prepare_list C "$C"
-#                      PkgCategories[$MaxPkgID]="$C"
-#                    fi
-#                    ;;
-#      requires:\ *) if ! [ "$T" ]; then
-#                      R="${L#requires: }"
-#                      __prepare_list R "$R"
-#                      PkgRequisitesDeclared[$MaxPkgID]="$R"
-#                    fi
-#                    ;;
-#       version:\ *) if ! [ "$T" ]; then
-#                      V="${L#version: }"
-#                      PkgVersionAvailable[$MaxPkgID]="${V// }"
-#                    fi
-#                    ;;
-#     obsoletes:\ *) if ! [ "$T" ]; then
-#                      O="${L#obsoletes: }"
-#                      __prepare_list O "$O" ","
-#                      PkgObsoletedPkgs[$MaxPkgID]="$O"
-#                    fi
-#                    ;;
-#      depends2:\ *) if ! [ "$T" ]; then
-#                      if __find_in_list "${PkgCategories[$MaxPkgID]}" "_obsolete"; then
-#                        D="${L#depends2: }"
-#                        __prepare_list D "$D" ","
-#                        ObsoletePkgs[$MaxPkgID]="$D"
-#                      fi
-#                    fi
-#                    ;;
-#         \[prev\]*) T="[prev]"
-#                    ;;
-#         \[test\]*) T="[test]"
-#  esac
-#done < <(sed -n '/^@ /p; /^category: /p; /^requires: /p; /^version: /p; /^obsoletes: /p; /^\[prev\]/p' "$cw_setup_ini")
-#*/
-
 #L="$(sed -n '
 #    :begin
 #    /^@\s\+\(\S\+\)\s*$/{s//add_new_package_to_catalogue "\1"/p; b}
-#    /^category:\s\+\(_obsolete\)\s*$/{s//PkgCategories[$MaxPkgID]="\1"; D="yes"/p; b}
+#    /^category:\s\+\(_obsolete\)\s*$/{s//PkgCategories[$MaxPkgID]="\1"; D="obsolete package"/p; b}
 #    /^category:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list C "\1"; PkgCategories[$MaxPkgID]="$C"; D=''/p; b}
 #    /^requires:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list R "\1"; PkgRequisitesDeclared[$MaxPkgID]="$R"/p; b}
 #    /^version:\s\+\(\S\+\)\s*$/{s//PkgVersionAvailable[$MaxPkgID]="\1"/p; b}
@@ -684,7 +589,7 @@ else
     InstalledPkgs["$id"]="${PkgName[$id]}"
     PkgVersionInstalled["$id"]="$V"
 
-  done < <(sed '1d' "$installed_db")
+  done < <(sed '1d; /^\s*$/d' "$installed_db")
 ## */
 fi
 
