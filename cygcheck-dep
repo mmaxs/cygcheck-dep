@@ -54,6 +54,9 @@ Setup diagnostics switches:
                   some reason not installed dependecies, but also merely
                   unknown package names).
 
+  -m              Show missing required dependencies and installed packages
+                  for which they are required.
+
   -o              Show installed packages that are obsoleted by available
                   replacing package.
 
@@ -76,13 +79,13 @@ Package information switches:
   -N PACKAGE...   Recursively resolve the list of packages that need the
                   installed PACKAGE.
 
-  -u PACKAGE...   Show the list of packages that will become not required by
+  -d PACKAGE...   Show the list of packages that will become not required by
                   any other installed packages (i.e. will become "leaves"),
                   if the PACKAGE is uninstalled. Thus, these packages,
                   if being unnecessary, can be selected for uninstalling
                   in <setup.exe> together with the PACKAGE.
 
-  -U PACKAGE...   The recursive version of -u switch.
+  -D PACKAGE...   The recursive version of -d switch.
 
 Run mode options:
   -c              Normally every time $name runs, it downloads latest
@@ -125,7 +128,7 @@ Output modifiers:
                     ?  - extraneous installed package,
                     &  - obselete installed package,
                     !  - installed package with broken dependencies,
-                    *  - not installed package (broken dependency);
+                    *  - not installed package (e.g. broken dependency);
                   (! and & marks might be juxtaposed).
 
   -q              Be more quiet: suppress any advance warnings.
@@ -172,7 +175,7 @@ declare -a PkgVersionAvailable PkgVersionInstalled
 #     - indexed array, array element is a recursively resolved $'\n'-dlimited list
 #       of package IDs that are directly and indirectly required by the package $id
 declare -a PkgRequisitesDeclared PkgRequisites PkgRequisites_R
-declare -a  PkgBrokenRequisites
+declare -a  PkgBrokenRequisites MissingPkgs
 
 # ${PkgObsoletedPkgs[$id]}
 declare -a PkgObsoletedPkgs
@@ -209,16 +212,14 @@ declare -a UnknownPkgs
 __squeeze()
 {
   local -n string_="$1"
-#  local c="${2:-$'\n'}"
-#  local t="$string_"
+#  local c="${2:-$'\n'}" t="$string_"
 #  string_="${t//$c$c/$c}"
 #  while [ "$string_" != "$t" ]; do
 #    t="$string_"
 #    string_="${t//$c$c/$c}"
 #  done
   eval "
-    local c$1=\"\${2:-\$'\n'}\"
-    local t$1=\"\$string_\"
+    local c$1=\"\${2:-\$'\n'}\" t$1=\"\$string_\"
     string_=\"\${t$1//\${c$1}\${c$1}/\${c$1}}\"
     while [ \"\$string_\" != \"\${t$1}\" ]; do
       t$1=\"\$string_\"
@@ -265,29 +266,28 @@ __find_in_list()
 ## nout() /*
 nout()
 {
-  local pp p
-  local -a t
+  local id m=''
+  local -a p
 
-  for pp; do for p in $pp; do t["$p"]="$p"; done; done
-  pp=''
+  for id in $*; do p["$id"]="$id"; done
 
-  for p in "${!t[@]}"; do
+  for id in "${!p[@]}"; do
     if [ "$opt_use_prefix" ]; then
-      pp=''
-      if [ "${UnknownPkgs[$p]}" ]; then
-        pp+='??'
-      elif [ "${InstalledPkgs[$p]}" ]; then
-        if [ "${ExtraneousPkgs[$p]}" ]; then
-          pp+='?'
+      m=''
+      if [ "${UnknownPkgs[$id]}" ]; then
+        m+='??'
+      elif [ "${InstalledPkgs[$id]}" ]; then
+        if [ "${ExtraneousPkgs[$id]}" ]; then
+          m+='?'
         else
-          [ "${PkgBrokenRequisites[$p]}" ] && pp+='!'
-          [ "${ObsoletePkgs[$p]}" ] && pp+='&'
+          [ "${PkgBrokenRequisites[$id]}" ] && m+='!'
+          [ "${ObsoletePkgs[$id]}" ] && m+='&'
         fi
       else
-        pp+='*'
+        m+='*'
       fi
     fi
-    echo -n " $pp${PkgName[$p]}"
+    echo -n " $m${PkgName[$id]}"
   done
 }
 ## */
@@ -301,12 +301,12 @@ add_new_package_to_catalogue()
 }
 ## */
 
-## resolve_package_names_to_ids() /*
+## resolve_package_name_list() /*
 # [in/out]  $1 - reference (variable name) to resulting list of package IDs
 # [in]      $2 - string with ${IFS}-delimited source list of package names
 # [opt]     $3 - source list description
 # [side]    add unknown package names to the catalogue and to ${UnknownPkgs[$id]}
-resolve_package_names_to_ids()
+resolve_package_name_list()
 {
   local -n list_="$1"
   list_=''
@@ -336,6 +336,46 @@ resolve_package_names_to_ids()
 }
 ## */
 
+## is_all_installed(), filter_not_installed() /*
+is_all_installed()
+{
+  local id
+  for id in $*; do
+    [ "${InstalledPkgs[$id]}" ] || return 1
+  done
+  return 0
+}
+
+filter_not_installed()
+{
+  local -n list_="$1"
+  list_=''
+#  local id
+#  for id in ${*:2}; do
+#    [ "${InstalledPkgs[$id]}" ] || list_=$'\n'"$id"
+#  done
+  eval "
+    local id$1
+    for id$1 in \${*:2}; do
+      [ \"\${InstalledPkgs[\${id$1}]}\" ] || list_=\$'\n'\"\${id$1}\"
+    done
+  "
+  list_="${list_#$'\n'}"
+}
+## */
+
+## resolve_PkgRequisites_R(), resolve_PkgDependants_R() /*
+resolve_PkgRequisites_R()
+{
+  :
+}
+
+resolve_PkgDependants_R()
+{
+  :
+}
+## */
+
 
 ### SCRIPT
 
@@ -344,6 +384,8 @@ cmd_show_leaves=''
 cmd_show_islands=''
 cmd_show_interdependent=''
 cmd_show_broken=''
+cmd_show_missing=''
+cmd_show_unknown=''
 cmd_show_obsoleted=''
 cmd_show_extraneous=''
 cmd_show_updates=''
@@ -362,7 +404,7 @@ opt_use_prefix=''
 opt_be_more_quiet=''
 opt_be_more_verbose=''
 
-while getopts "liIboxCrRnNuUcs:SOpqv-:hV" OPT; do
+while getopts "liIbmMoxCrRnNdDcs:SOpqv-:hV" OPT; do
   case "$OPT" in
     l)  cmd_show_leaves="{cmd_show_leaves}"
         ;;
@@ -371,6 +413,10 @@ while getopts "liIboxCrRnNuUcs:SOpqv-:hV" OPT; do
     I)  cmd_show_interdependent="{cmd_show_interdependent}"
         ;;
     b)  cmd_show_broken="{cmd_show_broken}"
+        ;;
+    m)  cmd_show_missing="{cmd_show_missing}"
+        ;;
+    M)  cmd_show_unknown="{cmd_show_unknown}"
         ;;
     o)  cmd_show_obsoleted="{cmd_show_obsoleted}"
         ;;
@@ -386,9 +432,9 @@ while getopts "liIboxCrRnNuUcs:SOpqv-:hV" OPT; do
         ;;
     N)  cmd_show_dependent_recursive="{cmd_show_dependent_recursive}"
         ;;
-    u)  cmd_show_new_leaves="{cmd_show_new_leaves}"
+    d)  cmd_show_new_leaves="{cmd_show_new_leaves}"
         ;;
-    U)  cmd_show_new_leaves_recursive="{cmd_show_new_leaves_recursive}"
+    D)  cmd_show_new_leaves_recursive="{cmd_show_new_leaves_recursive}"
         ;;
     c)  opt_use_cached_setup_ini="yes"
         ;;
@@ -491,11 +537,10 @@ if ! [ -r "$cw_setup_ini" ]; then
 fi
 ## */
 
-## read and parse <setup.ini> file; populate ${PkgID[]}, ${PkgName[]}, et al. /*
-# $L - the input line
-# $P $C $R $V $O $D $T - temporary
+# $L $P $C $R $V $O $D $T - temporary variables
 L=''; P=''; C=''; R=''; V=''; O=''; D=''; T=''
 
+## read and parse <setup.ini> file; populate ${PkgID[]}, ${PkgName[]}, et al. /*
 #L="$(sed -n '
 #    :begin
 #    /^@\s\+\(\S\+\)\s*$/{s//add_new_package_to_catalogue "\1"/p; b}
@@ -523,7 +568,7 @@ L="$(sed -n '
 eval "$L"
 L=''
 
-## check the results of reading/parsing /*
+## check the results of reading/parsing <setup.ini> file /*
 if [ "$(sed -n '/^@ /p' "$cw_setup_ini" | wc -l)" != "$MaxPkgID" ]; then
   echo >&2 "$0: failed to parse data from <setup.ini> file:"
   exit 8
@@ -573,7 +618,6 @@ if [ "$opt_treat_setup_ini_as_installed" ]; then
   for id in "${!InstalledPkgs[@]}"; do
     [ "${PkgCategories[$id]}" = "_obsolete" ] && unset -v InstalledPkgs\["$id"\]
   done
-  echo "${#InstalledPkgs[@]}"
 ## */
 else
 ## read and parse <installed.db> file; populate ${InstalledPkgs[]}, ${PkgVersionInstalled[]} /*
@@ -586,12 +630,14 @@ else
       ExtraneousPkgs[$MaxPkgID]="$P"
       id="$MaxPkgID"
     fi
+
     InstalledPkgs["$id"]="${PkgName[$id]}"
     PkgVersionInstalled["$id"]="$V"
-
   done < <(sed '1d; /^\s*$/d' "$installed_db")
 ## */
 fi
+
+echo "${#InstalledPkgs[@]}"
 
 ## print advance warning about extraneous installed packages /*
 [ "$opt_be_more_quiet" ] ||
@@ -609,34 +655,53 @@ fi
 
 ## $cmd_show_extraneous /*
 if [ "$cmd_show_extraneous" ]; then
-  for id in "${!ExtraneousPkgs[@]}"; do
-    nout "$id"; echo ": extraneous installed package with unknown dependencies"
-  done
+  if [ "${#ExtraneousPkgs[@]}" -ne 0 ]; then
+    for id in "${!ExtraneousPkgs[@]}"; do
+      nout "$id"; echo ": extraneous installed package with unknown dependencies"
+    done
+    echo
+  fi
 
   cmds="${cmds//$cmd_show_extraneous}"
-  [ "$cmds" ] && echo || exit
+  [ "$cmds" ] || exit
 fi
 ## */
 
-## convert name lists in ${PkgRequisitesDeclared[]}, ${ObsoletePkgs[]}, and ${PkgObsoletedPkgs[]} to package ID lists /*
-for id in "${!PkgRequisitesDeclared[@]}"; do
-  if ! [ "${InstalledPkgs[$id]}" ]; then
-    unset -v PkgRequisitesDeclared\["$id"\]
-    continue
-  fi
+## $cmd_show_updates /*
+if [ "$cmd_show_updates" ]; then
+  T=''
+  for id in "${!InstalledPkgs[@]}"; do
+    [ "${ExtraneousPkgs[$id]}" ] && continue
+    C="${PkgVersionInstalled[$id]}"
+    V="${PkgVersionAvailable[$id]}"
+    if [ "$V" ]; then
+      if [ "$C" \< "$V" ]; then
+        nout "$id"; echo "-$C: new version ( $V )"
+        T="command output"
+      fi
+    else
+      nout "$id"; echo "-$C: information about the new version is not available"
+      T="command output"
+    fi
+  done
+  [ "$T" ] && echo
 
-  R="${PkgRequisitesDeclared[$id]}"
-  resolve_package_names_to_ids R "$R" "in <setup.ini> file record of 'requires:' for package ${PkgName[$id]}"
-  PkgRequisitesDeclared["$id"]="$R"
-done
+  cmds="${cmds//$cmd_show_updates}"
+  [ "$cmds" ] || exit
+fi
+## */
+
+## convert name lists in ${ObsoletePkgs[]} to package ID lists /*
 for id in "${!ObsoletePkgs[@]}"; do
   O="${ObsoletePkgs[$id]}"
-  resolve_package_names_to_ids O "$O" "in <setup.ini> file record of 'depends2:' for package ${PkgName[$id]}"
+  resolve_package_name_list O "$O" "in <setup.ini> file record of 'depends2:' for package ${PkgName[$id]}"
   ObsoletePkgs["$id"]="$O"
 done
+## */
+## convert name lists in ${PkgObsoletedPkgs[]} to package ID lists, add obsoleted packages to ${ObsoletePkgs[]} /*
 for id in "${!PkgObsoletedPkgs[@]}"; do
   O="${PkgObsoletedPkgs[$id]}"
-  resolve_package_names_to_ids O "$O" "in <setup.ini> file record of 'obsoletes:' for package ${PkgName[$id]}"
+  resolve_package_name_list O "$O" "in <setup.ini> file record of 'obsoletes:' for package ${PkgName[$id]}"
   PkgObsoletedPkgs["$id"]="$O"
 
   # add each obsoleted package and its replacement into ${ObsoletePkgs[]} if they are not there yet
@@ -649,101 +714,247 @@ for id in "${!PkgObsoletedPkgs[@]}"; do
     fi
   done
 done
+## */
+
 echo "${#ObsoletePkgs[@]}"
+
+## determine requisites for installed packages /*
+L="${!InstalledPkgs[*]}"
+while [ "$L" ]; do
+  C=''
+
+  for id in $L; do
+    # convert name lists in ${PkgRequisitesDeclared[$id]} to package ID lists
+    R="${PkgRequisitesDeclared[$id]}"
+    resolve_package_name_list R "$R" "in <setup.ini> file record of 'requires:' for package ${PkgName[$id]}"
+    PkgRequisitesDeclared["$id"]="$R"
+
+    # choose the appropriate list of requisites
+    O="${ObsoletePkgs[$id]}"
+    if [ "$O" ] && ! [ "$opt_respect_obsoleted" ]; then
+      R="$O"
+    else
+      R="${PkgRequisitesDeclared[$id]}"
+    fi
+
+    # examine each package in the requisite list
+    for P in $R; do
+      O="${ObsoletePkgs[$P]}"
+      if [ "$O" ] && ! [ "$opt_respect_obsoleted" ]; then
+        PkgRequisites["$id"]+=$'\n'"$O"
+      else
+        PkgRequisites["$id"]+=$'\n'"$P"
+      fi
+    done
+
+    # the resulting list
+    PkgRequisites["$id"]="${PkgRequisites[$id]#$'\n'}"
+
+    # detect broken dependencies
+    filter_not_installed D "${PkgRequisites[$id]}"
+    if [ "$D" ]; then
+      PkgBrokenRequisites["$id"]="$D"
+      for P in $D; do
+        if [ "${MissingPkgs[$P]}" ]; then
+          MissingPkgs["$P"]+=$'\n'"$id"
+        else
+          MissingPkgs["$P"]="$id"
+          C+=" $P"
+        fi
+      done
+    fi
+  done
+
+  L="$C"
+done
 ## */
 
 ## print advance warning about unknown package names /*
 [ "$opt_be_more_quiet" ] ||
-if [ "${#UnknownPkgs[@]}" -ne 0 ]; then
+if [ "${#UnknownPkgs[@]}" -ne 0 ] && ! [ "$cmd_show_unknown" ]; then
   echo >&2    "# $0:"
   echo >&2    "# warning: unknown package names:"
   echo >&2    "#   the following encountered package names does not match"
-  echo >&2    "#   any available or installed package:"
-  echo >&2    "#("
-for id in "${!UnknownPkgs[@]}"; do
-  echo >&2    "# ${PkgName[$id]}: ${UnknownPkgs[$id]}"
-done
-  echo >&2    "#)"
+  echo >&2    "#   any available or installed package (use -M switch to get details):"
+  echo >&2 -n "#("
+  nout >&2 "${!UnknownPkgs[@]}"
+  echo >&2    ")"
   echo >&2
 fi
 ## */
 
-## $cmd_show_updates /*
-if [ "$cmd_show_updates" ]; then
-  for id in "${!InstalledPkgs[@]}"; do
-    [ "${ExtraneousPkgs[$id]}" ] && continue
-    C="${PkgVersionInstalled[$id]}"
-    V="${PkgVersionAvailable[$id]}"
-    if [ "$V" ]; then
-      [ "$C" \< "$V" ] && { nout "$id"; echo "-$C: new version ( $V )"; }
-    else
-      nout "$id"; echo "-$C: information about the new version is not available"
-    fi
-  done
+## $cmd_show_unknown /*
+if [ "$cmd_show_unknown" ]; then
+  if [ "${#UnknownPkgs[@]}" -ne 0 ]; then
+    for id in "${!UnknownPkgs[@]}"; do
+      nout "$id"; echo -n ": unknown package name ${UnknownPkgs[$id]}"
+    done
+    echo
+  fi
 
-  cmds="${cmds//$cmd_show_updates}"
-  [ "$cmds" ] && echo || exit
+  cmds="${cmds//$cmd_show_unknown}"
+  [ "$cmds" ] || exit
 fi
 ## */
 
 ## $cmd_show_obsoleted /*
 if [ "$cmd_show_obsoleted" ]; then
+  T=''
   for id in "${!InstalledPkgs[@]}"; do
     O="${ObsoletePkgs[$id]}"
-    [ "$O" ] && { nout "$id"; echo -n ": is obsoleted by ("; nout "$O"; echo " )"; }
+    if [ "$O" ]; then
+      nout "$id"; echo -n ": is obsoleted by ("; nout "$O"; echo " )"
+      T="command output"
+    fi
   done
+  [ "$T" ] && echo
 
   cmds="${cmds//$cmd_show_obsoleted}"
-  [ "$cmds" ] && echo || exit
+  [ "$cmds" ] || exit
 fi
 ## */
 
-## determine requisites for installed packages /*
-for id in "${!InstalledPkgs[@]}"; do
-  for P in ${PkgRequisitesDeclared[$id]}; do
-    O="${ObsoletePkgs[$P]}"
-    if [ "$O" ]; then
-      if [ "${InstalledPkgs[$P]}" ]; then
-        T="all replacing packages are also installed"
-        for R in $O; do
-          [ "${InstalledPkgs[$R]}" ] && continue
-          T=''
-        done
-        if [ "$T" ]; then
-          PkgRequisites["$id"]+=$'\n'"$O"
-        elif [ "$opt_respect_obsoleted" ]; then
-          PkgRequisites["$id"]+=$'\n'"$P"
-        else
-          for R in $O; do
-            PkgRequisites["$id"]+=$'\n'"$R"
-            [ "${InstalledPkgs[$R]}" ] || PkgBrokenRequisites["$id"]+=$'\n'"$R"
-          done
-        fi
-      else
-        for R in $O; do
-          PkgRequisites["$id"]+=$'\n'"$R"
-          [ "${InstalledPkgs[$R]}" ] || PkgBrokenRequisites["$id"]+=$'\n'"$R"
-        done
-      fi
-    else
-      PkgRequisites["$id"]+=$'\n'"$P"
-      [ "${InstalledPkgs[$P]}" ] || PkgBrokenRequisites["$id"]+=$'\n'"$P"
-    fi
-  done
-  PkgRequisites["$id"]="${PkgRequisites[$id]#$'\n'}"
-  PkgBrokenRequisites["$id"]="${PkgBrokenRequisites[$id]#$'\n'}"
-done
+## print advance warning about missing required dependencies /*
+[ "$opt_be_more_quiet" ] ||
+if [ "${#MissingPkgs[@]}" -ne 0 ] && ! [ "$cmd_show_missing" ]; then
+  echo >&2    "# $0:"
+  echo >&2    "# warning: missing required dependencies:"
+  echo >&2    "#   the following packages are not installed, but are required as dependencies"
+  echo >&2    "#   for some installed packages (use -m switch to get details):"
+  echo >&2 -n "#("
+  nout >&2 "${!MissingPkgs[@]}"
+  echo >&2    " )"
+  echo >&2
+fi
 ## */
 
 ## $cmd_show_broken /*
 if [ "$cmd_show_broken" ]; then
-  for id in "${!InstalledPkgs[@]}"; do
-    R="${PkgBrokenRequisites[$id]}"
-    [ "$R" ] && { nout "$id"; echo -n ": broken required dependencies ("; nout "$R"; echo " )"; }
-  done
+  if [ "${#PkgBrokenRequisites[@]}" -ne 0 ]; then
+    for id in "${!PkgBrokenRequisites[@]}"; do
+      nout "$id"; echo -n ": package with broken dependencies ("; nout "${PkgBrokenRequisites[$id]}"; echo " )"
+    done
+    echo
+  fi
 
   cmds="${cmds//$cmd_show_broken}"
-  [ "$cmds" ] && echo || exit
+  [ "$cmds" ] || exit
+fi
+## */
+
+## $cmd_show_missing /*
+if [ "$cmd_show_missing" ]; then
+  if [ "${#MissingPkgs[@]}" -ne 0 ]; then
+    for id in "${!MissingPkgs[@]}"; do
+      nout "$id"; echo -n ": missing required dependency for ("; nout "${MissingPkgs[$id]}"; echo " )"
+    done
+    echo
+  fi
+
+  cmds="${cmds//$cmd_show_missing}"
+  [ "$cmds" ] || exit
+fi
+## */
+
+## $cmd_show_islands, $cmd_show_interdependent /*
+## */
+
+if [ "$cmd_show_leaves" ] ||
+   [ "$cmd_show_dependent" ] ||
+   [ "$cmd_show_dependent_recursive" ] ||
+   [ "$cmd_show_new_leaves" ] ||
+   [ "$cmd_show_new_leaves_recursive" ]; then
+## determine dependent packages for installed packages /*
+  for id in "${!InstalledPkgs[@]}"; do
+    R="${PkgRequisites[$id]}"
+    for P in $R; do
+      if [ "${PkgDependants[$P]}" ]; then
+        PkgDependants["$P"]+=$'\n'"$id"
+      else
+        PkgDependants["$P"]="$id"
+      fi
+    done
+  done
+## */
+fi
+
+## $cmd_show_leaves /*
+if [ "$cmd_show_leaves" ]; then
+  T=''
+  for id in "${!InstalledPkgs[@]}"; do
+    if ! [ "${PkgDependants[$id]}" ]; then
+      nout "$id"; __find_in_list "${PkgCategories[$id]}" "Base" && echo " [Base]" || echo
+      T="command output"
+    fi
+  done
+  [ "$T" ] && echo
+
+  cmds="${cmds//$cmd_show_leaves}"
+  [ "$cmds" ] || exit
+fi
+## */
+
+queried_ids=''
+resolve_package_name_list L "${*:$OPTIND}" "in command line arguments"
+for id in $L; do
+  if [ "${InstalledPkgs[$id]}" ]; then
+    queried_ids+=" $id"
+  else
+    nout "$id"
+    if [ "${UnknownPkgs[$id]}" ]; then
+      echo ": unknown package name ${UnknownPkgs[$id]}"
+    else
+      echo ": package is not installed"
+    fi
+  fi
+done
+[ "$queried_ids" ] || exit
+
+## $cmd_show_required, $cmd_show_dependent /*
+if [ "$cmd_show_required" ] || [ "$cmd_show_dependent" ]; then
+  for id in $queried_ids; do
+    if [ "$cmd_show_required" ]; then
+      R="${PkgRequisites[$id]}"
+      nout "$id"; echo -n ": requires ("; nout "$R"; echo " )"
+    fi
+    if [ "$cmd_show_dependent" ]; then
+      D="${PkgDependants[$id]}"
+      nout "$id"; echo -n ": is needed for ("; nout "$D"; echo " )"
+    fi
+  done
+  echo
+
+  cmds="${cmds//$cmd_show_required}"
+  cmds="${cmds//$cmd_show_dependent}"
+  [ "$cmds" ] || exit
+fi
+## */
+
+## $cmd_show_required_recursive, $cmd_show_dependent_recursive /*
+if [ "$cmd_show_required_recursive" ] || [ "$cmd_show_dependent_recursive" ]; then
+  for id in $queried_ids; do
+    if [ "$cmd_show_required_recursive" ]; then
+      R="${PkgRequisites_R[$id]-unset}"
+      if [ "$R" = "unset" ]; then
+        resolve_PkgRequisites_R "$id"
+        R="${PkgRequisites_R[$id]}"
+      fi
+      nout "$id"; echo -n ": recursively requires ("; nout "$R"; echo " )"
+    fi
+    if [ "$cmd_show_dependent_recursive" ]; then
+      D="${PkgDependants_R[$id]-unset}"
+      if [ "$D" = "unset" ]; then
+        resolve_PkgDependants_R "$id"
+        D="${PkgDependants_R[$id]}"
+      fi
+      nout "$id"; echo -n ": is recursively needed for ("; nout "$D"; echo " )"
+    fi
+  done
+  echo
+
+  cmds="${cmds//$cmd_show_required_recursive}"
+  cmds="${cmds//$cmd_show_dependent_recursive}"
+  [ "$cmds" ] || exit
 fi
 ## */
 
