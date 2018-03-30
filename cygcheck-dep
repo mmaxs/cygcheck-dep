@@ -205,39 +205,39 @@ declare -a UnknownPkgs
 
 ## */
 
-## __squeeze(), __prepare_list(), __find_in_list() /*
+## __squeeze(), __make_list(), __find_in_list(), __remove_from_list() /*
 
-# [in/out]  $1 - reference (variable name) to string
-# [opt]     $2 - char for squeezing, default to $'\n'
+# [in/out]  $1 - reference (variable name) to string being processing
+# [in]      $2 - char for squeezing
 __squeeze()
 {
   local -n string_="$1"
-#  local c="${2:-$'\n'}" t="$string_"
-#  string_="${t//$c$c/$c}"
+#  local t="$string_"
+#  string_="${t//$2$2/$2}"
 #  while [ "$string_" != "$t" ]; do
 #    t="$string_"
-#    string_="${t//$c$c/$c}"
+#    string_="${t//$2$2/$2}"
 #  done
   eval "
-    local c$1=\"\${2:-\$'\n'}\" t$1=\"\$string_\"
-    string_=\"\${t$1//\${c$1}\${c$1}/\${c$1}}\"
+    local t$1=\"\$string_\"
+    string_=\"\${t$1//\$2\$2/\$2}\"
     while [ \"\$string_\" != \"\${t$1}\" ]; do
       t$1=\"\$string_\"
-      string_=\"\${t$1//\${c$1}\${c$1}/\${c$1}}\"
+      string_=\"\${t$1//\$2\$2/\$2}\"
     done
   "
 }
 
-# [in/out]  $1 - reference (variable name) to resulting list
+# [in/out]  $1 - reference (variable name) to the string with resulting list
 # [in]      $2 - string with source list
 # [opt]     $3 - source list delimiter, a space by default
-__prepare_list()
+__make_list()
 {
   local -n list_="$1"
 #  local t="${2//${3:- }/$'\n'}"
 #  [ "$t" = "$list_" ] && return
 #  t="${t// }"
-#  __squeeze t
+#  __squeeze t $'\n'
 #  t="${t#$'\n'}"
 #  t="${t%$'\n'}"
 #  list_="$t"
@@ -245,20 +245,63 @@ __prepare_list()
     local t$1=\"\${2//\${3:- }/\$'\n'}\"
     [ \"\${t$1}\" = \"\$list_\" ] && return
     t$1=\"\${t$1// }\"
-    __squeeze t$1
+    __squeeze t$1 \$'\n'
     t$1=\"\${t$1#\$'\n'}\"
     t$1=\"\${t$1%\$'\n'}\"
     list_=\"\${t$1}\"
   "
 }
 
+
+# # [in]  $1 - string with the list to be searched
+# # [in]  $2 - sought item
+# # [opt] $3 - list delimiter, default to $'\n'
+# __find_in_list()
+# {
+#   local d="${3:-$'\n'}"
+#   [ "$2" ] && [[ "$1" =~ (^|"$d")"$2"("$d"|$) ]]
+# }
+
 # [in]  $1 - string with the list to be searched
-# [in]  $2 - sought item
+# [in]  $2 - string with the list of sought items
 # [opt] $3 - list delimiter, default to $'\n'
 __find_in_list()
 {
-  local d="${3:-$'\n'}"
-  [[ "$1" =~ (^|"$d")"$2"("$d"|$) ]]
+  local t="not found" d="${3:-$'\n'}" IFS0="$IFS"
+  IFS="$d"
+  for t in $2; do
+    if [[ "$1" =~ (^|"$d")"$t"("$d"|$) ]]; then
+      t=''
+      break
+    fi
+  done
+  IFS="$IFS0"
+  test -z "$t"
+}
+
+
+# [in/out]  $1 - reference (variable name) to the string with the list to be modified
+# [in]      $2 - string with list of items to be removed
+# [opt]     $3 - list delimiter, $'\n' by default
+__remove_from_list()
+{
+  local -n list_="$1"
+#  local t d="${3:-$'\n'}" IFS0="$IFS"
+#  list_="$d$list_$d"
+#  IFS="$d"
+#  for t in $2; do list_="${list_//$d$t$d/$d}"; done
+#  IFS="$IFS0"
+#  list_="${list_#$d}"
+#  list_="${list_%$d}"
+  eval "
+    local t$1 d$1=\"\${3:-\$'\n'}\" IFS0$1=\"\$IFS\"
+    list_=\"\${d$1}\$list_\${d$1}\"
+    IFS=\"\${d$1}\"
+    for t$1 in \$2; do list_=\"\${list_//\${d$1}\${t$1}\${d$1}/\${d$1}}\"; done
+    IFS=\"\${IFS0$1}\"
+    list_=\"\${list_#\${d$1}}\"
+    list_=\"\${list_%\${d$1}}\"
+  "
 }
 
 ## */
@@ -336,8 +379,8 @@ resolve_package_name_list()
 }
 ## */
 
-## is_all_installed(), filter_not_installed() /*
-is_all_installed()
+## are_all_installed(), filter_not_installed() /*
+are_all_installed()
 {
   local id
   for id in $*; do
@@ -367,12 +410,58 @@ filter_not_installed()
 ## resolve_PkgRequisites_R(), resolve_PkgDependants_R() /*
 resolve_PkgRequisites_R()
 {
-  :
+  local id IFS0="$IFS"
+  local -a result
+
+  resolve()
+  {
+    local p t
+    for p in ${PkgRequisites["$1"]}; do
+      [ "${result[$p]}" ] && continue
+      result["$p"]="$p"
+      if [ "${PkgRequisites_R[$p]+set}" ]; then
+        for t in ${PkgRequisites_R["$p"]}; do result["$t"]="$t"; done
+      else
+        resolve "$p"
+      fi
+    done
+  }
+
+  for id in $*; do
+    result=()
+    resolve "$id"
+    IFS=$'\n'
+    PkgRequisites_R["$id"]="${!result[*]}"
+    IFS="$IFS0"
+  done
 }
 
 resolve_PkgDependants_R()
 {
-  :
+  local id IFS0="$IFS"
+  local -a result
+
+  resolve()
+  {
+    local p t
+    for p in ${PkgDependants["$1"]}; do
+      [ "${result[$p]}" ] && continue
+      result["$p"]="$p"
+      if [ "${PkgDependants_R[$p]+set}" ]; then
+        for t in ${PkgDependants_R["$p"]}; do result["$t"]="$t"; done
+      else
+        resolve "$p"
+      fi
+    done
+  }
+
+  for id in $*; do
+    result=()
+    resolve "$id"
+    IFS=$'\n'
+    PkgDependants_R["$id"]="${!result[*]}"
+    IFS="$IFS0"
+  done
 }
 ## */
 
@@ -390,7 +479,7 @@ cmd_show_obsoleted=''
 cmd_show_extraneous=''
 cmd_show_updates=''
 cmd_show_required=''
-cmd_show_required_recurisive=''
+cmd_show_required_recursive=''
 cmd_show_dependent=''
 cmd_show_dependent_recursive=''
 cmd_show_new_leaves=''
@@ -426,7 +515,7 @@ while getopts "liIbmMoxCrRnNdDcs:SOpqv-:hV" OPT; do
         ;;
     r)  cmd_show_required="{cmd_show_required}"
         ;;
-    R)  cmd_show_required_recurisive="{cmd_show_required_recurisive}"
+    R)  cmd_show_required_recursive="{cmd_show_required_recursive}"
         ;;
     n)  cmd_show_dependent="{cmd_show_dependent}"
         ;;
@@ -472,9 +561,9 @@ while getopts "liIbmMoxCrRnNdDcs:SOpqv-:hV" OPT; do
         ;;
   esac
 done
-eval cmds=\""$(IFS='$'; echo "\$${!cmd_*}")"\"
 ## */
 
+eval cmds=\""$(IFS='$'; echo "\$${!cmd_*}")"\"
 [ "$cmds" ] || exit
 
 ## check for the cache directory /*
@@ -545,11 +634,11 @@ L="$(sed -n '
     :begin
     /^@\s\+\(\S\+\)\s*$/{s//add_new_package_to_catalogue "\1"/p; b}
     /^category:\s\+\(_obsolete\)\s*$/{s//PkgCategories[$MaxPkgID]="\1"; T="obsolete package"/p; b}
-    /^category:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list C "\1"; PkgCategories[$MaxPkgID]="$C"; T=''/p; b}
+    /^category:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__make_list C "\1"; PkgCategories[$MaxPkgID]="$C"; T=''/p; b}
     /^version:\s\+\(\S\+\)\s*$/{s//PkgVersionAvailable[$MaxPkgID]="\1"/p; b}
-    /^obsoletes:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list O "\1" ","; PkgObsoletedPkgs[$MaxPkgID]="$O"/p; b}
-    /^requires:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//[ "$T" ] \&\& { __prepare_list R "\1"; PkgRequisitesDeclared[$MaxPkgID]="$R"; }/p; b}
-    /^depends2:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list R "\1" ","; [ "$T" ] \&\& ObsoletePkgs[$MaxPkgID]="$R" || PkgRequisitesDeclared[$MaxPkgID]="$R"/p; b}
+    /^obsoletes:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__make_list O "\1" ","; PkgObsoletedPkgs[$MaxPkgID]="$O"/p; b}
+    /^requires:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//[ "$T" ] \&\& { __make_list R "\1"; PkgRequisitesDeclared[$MaxPkgID]="$R"; }/p; b}
+    /^depends2:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__make_list R "\1" ","; [ "$T" ] \&\& ObsoletePkgs[$MaxPkgID]="$R" || PkgRequisitesDeclared[$MaxPkgID]="$R"/p; b}
     /^\[prev\]/{:skip-prev n; /^@/b begin; b skip-prev}
     /^\[test\]/{:skip-test n; /^@/b begin; b skip-test}
 ' "$cw_setup_ini")"
@@ -714,16 +803,25 @@ while [ "$L" ]; do
   for id in $L; do
     # convert name lists in ${PkgRequisitesDeclared[$id]} to package ID lists
     R="${PkgRequisitesDeclared[$id]}"
-    resolve_package_name_list R "$R" "in <setup.ini> file record of 'requires:' for package ${PkgName[$id]}"
-    PkgRequisitesDeclared["$id"]="$R"
+    if [ "$R" ]; then
+      resolve_package_name_list R "$R" "in <setup.ini> file record of 'requires:' for package ${PkgName[$id]}"
+      PkgRequisitesDeclared["$id"]="$R"
+    fi
 
     # choose the appropriate list of requisites
     O="${ObsoletePkgs[$id]}"
-    if [ "$O" ] && ! [ "$opt_respect_obsoleted" ]; then
-      R="$O"
+    if [ "$O" ]; then
+      if [ "$opt_respect_obsoleted" ]; then
+        R="${PkgRequisitesDeclared[$id]}"
+        __remove_from_list R "$O"
+      else
+        R="$O"
+      fi
     else
       R="${PkgRequisitesDeclared[$id]}"
     fi
+
+    [ "$R" ] || continue
 
     # examine each package in the requisite list
     for P in $R; do
@@ -756,6 +854,8 @@ while [ "$L" ]; do
   L="$C"
 done
 ## */
+
+echo "${#PkgRequisites[@]}"
 
 ## print advance warning about unknown package names /*
 [ "$opt_be_more_quiet" ] ||
@@ -845,6 +945,66 @@ fi
 ## */
 
 ## $cmd_show_islands, $cmd_show_interdependent /*
+if [ "$cmd_show_islands" ] || [ "$cmd_show_interdependent" ]; then
+  resolve_PkgRequisites_R "$(
+      for id in "${!InstalledPkgs[@]}" "${!MissingPkgs[@]}"; do
+        echo "$id"$'\n'"${PkgRequisites[$id]}"
+      done | sed '/^$/d' | sort -n | uniq -c | sort -nr | sed 's/^\s\+[0-9]\+\s\+//'
+  )"
+  declare -A RR
+  for id in "${!PkgRequisites_R[@]}"; do
+    R="${PkgRequisites_R[$id]}"
+    if __find_in_list "$R" "$id"; then
+      RR["$R"]+=$'\n'"$id"
+    fi
+  done
+
+  if [ "${#RR[@]}" -ne 0 ]; then
+    if [ "$cmd_show_interdependent" ]; then
+      for V in "${RR[@]}"; do
+        echo -n " ("; nout "$V"; echo " )"
+      done
+    else
+      for V in "${RR[@]}"; do
+        for id in "${!PkgRequisites[@]}"; do
+          __find_in_list "${PkgRequisites[$id]}" "$V" && { __find_in_list "$V" "$id" || continue 2; }
+        done
+        echo -n " ("; nout "$V"; echo " )"
+      done
+
+      #for id in "${!PkgRequisites[@]}"; do
+      #  R="${PkgRequisites[$id]}"
+      #  for T in "${!RR[@]}"; do
+      #    V="${RR[$T]}"
+      #    for P in $R; do
+      #      if [[ "$V" =~ (^|$'\n')"$P"($'\n'|$) ]]; then
+      #        [[ "$V" =~ (^|$'\n')"$id"($'\n'|$) ]] || unset -v RR\["$T"\]
+      #        continue 3
+      #      fi
+      #    done
+      #  done
+      #done
+      #for V in "${RR[@]}"; do
+      #  echo -n " ("; nout "$V"; echo " )"
+      #done
+
+      #for V in "${RR[@]}"; do
+      #  for P in $V; do
+      #    for id in "${!PkgRequisites[@]}"; do
+      #      if [[ "${PkgRequisites[$id]}" =~ (^|$'\n')"$P"($'\n'|$) ]]; then
+      #        [[ "$V" =~ (^|$'\n')"$id"($'\n'|$) ]] || continue 3
+      #      fi
+      #    done
+      #  done
+      #  echo -n " ("; nout "$V"; echo " )"
+      #done
+    fi #| sort
+  fi
+
+  cmds="${cmds//$cmd_show_islands}"
+  cmds="${cmds//$cmd_show_interdependent}"
+  [ "$cmds" ] || exit
+fi
 ## */
 
 if [ "$cmd_show_leaves" ] ||
@@ -852,8 +1012,8 @@ if [ "$cmd_show_leaves" ] ||
    [ "$cmd_show_dependent_recursive" ] ||
    [ "$cmd_show_new_leaves" ] ||
    [ "$cmd_show_new_leaves_recursive" ]; then
-## determine dependent packages for installed packages /*
-  for id in "${!InstalledPkgs[@]}"; do
+## determine dependent packages for installed and missing packages /*
+  for id in "${!InstalledPkgs[@]}" "${!MissingPkgs[@]}"; do
     R="${PkgRequisites[$id]}"
     for P in $R; do
       if [ "${PkgDependants[$P]}" ]; then
