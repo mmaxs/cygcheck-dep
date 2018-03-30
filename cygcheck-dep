@@ -541,18 +541,6 @@ fi
 L=''; P=''; C=''; R=''; V=''; O=''; D=''; T=''
 
 ## read and parse <setup.ini> file; populate ${PkgID[]}, ${PkgName[]}, et al. /*
-#L="$(sed -n '
-#    :begin
-#    /^@\s\+\(\S\+\)\s*$/{s//add_new_package_to_catalogue "\1"/p; b}
-#    /^category:\s\+\(_obsolete\)\s*$/{s//PkgCategories[$MaxPkgID]="\1"; D="obsolete package"/p; b}
-#    /^category:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list C "\1"; PkgCategories[$MaxPkgID]="$C"; D=''/p; b}
-#    /^requires:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list R "\1"; PkgRequisitesDeclared[$MaxPkgID]="$R"/p; b}
-#    /^version:\s\+\(\S\+\)\s*$/{s//PkgVersionAvailable[$MaxPkgID]="\1"/p; b}
-#    /^obsoletes:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//__prepare_list O "\1" ","; PkgObsoletedPkgs[$MaxPkgID]="$O"/p; b}
-#    /^depends2:\s\+\(\S\+\(\s\+\S\+\)*\)\s*$/{s//[ "$D" ] \&\& { __prepare_list D "\1" ","; ObsoletePkgs[$MaxPkgID]="$D"; }/p; b}
-#    /^\[prev\]/{:skip-prev n; /^@/b begin; b skip-prev}
-#    /^\[test\]/{:skip-test n; /^@/b begin; b skip-test}
-#' "$cw_setup_ini")"
 L="$(sed -n '
     :begin
     /^@\s\+\(\S\+\)\s*$/{s//add_new_package_to_catalogue "\1"/p; b}
