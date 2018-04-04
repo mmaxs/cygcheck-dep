@@ -267,7 +267,7 @@ __make_list()
 # [opt] $3 - list delimiter, default to $'\n'
 __find_in_list()
 {
-  local t="not found" d="${3:-$'\n'}" IFS0="$IFS"
+  local t='*' d="${3:-$'\n'}" IFS0="$IFS"
   IFS="$d"
   for t in $2; do
     if [[ "$1" =~ (^|"$d")"$t"("$d"|$) ]]; then
@@ -965,21 +965,19 @@ if [ "$cmd_show_islands" ] || [ "$cmd_show_interdependent" ]; then
         echo -n " ("; nout "$V"; echo " )"
       done
     else
-      for V in "${RR[@]}"; do
-        for id in "${!PkgRequisites[@]}"; do
-          __find_in_list "${PkgRequisites[$id]}" "$V" && { __find_in_list "$V" "$id" || continue 2; }
-        done
-        echo -n " ("; nout "$V"; echo " )"
-      done
+      #for V in "${RR[@]}"; do
+      #  for id in "${!PkgRequisites[@]}"; do
+      #    __find_in_list "${PkgRequisites[$id]}" "$V" && { __find_in_list "$V" "$id" || continue 2; }
+      #  done
+      #  echo -n " ("; nout "$V"; echo " )"
+      #done
 
       #for id in "${!PkgRequisites[@]}"; do
-      #  R="${PkgRequisites[$id]}"
       #  for T in "${!RR[@]}"; do
       #    V="${RR[$T]}"
-      #    for P in $R; do
-      #      if [[ "$V" =~ (^|$'\n')"$P"($'\n'|$) ]]; then
-      #        [[ "$V" =~ (^|$'\n')"$id"($'\n'|$) ]] || unset -v RR\["$T"\]
-      #        continue 3
+      #    for P in $V; do
+      #      if [[ "${PkgRequisites[$id]}" =~ (^|$'\n')"$P"($'\n'|$) ]]; then
+      #        [[ "$V" =~ (^|$'\n')"$id"($'\n'|$) ]] || { unset -v RR\["$T"\]; continue 3; }
       #      fi
       #    done
       #  done
@@ -998,6 +996,29 @@ if [ "$cmd_show_islands" ] || [ "$cmd_show_interdependent" ]; then
       #  done
       #  echo -n " ("; nout "$V"; echo " )"
       #done
+
+      #for V in "${RR[@]}"; do
+      #  for id in "${!PkgRequisites[@]}"; do
+      #    for P in $V; do
+      #        if [[ "${PkgRequisites[$id]}" =~ (^|$'\n')"$P"($'\n'|$) ]]; then
+      #        [[ "$V" =~ (^|$'\n')"$id"($'\n'|$) ]] || continue 3
+      #      fi
+      #    done
+      #  done
+      #  echo -n " ("; nout "$V"; echo " )"
+      #done
+
+      for V in "${RR[@]}"; do
+      (
+        for id in $V; do unset -v PkgRequisites\["$id"\]; done
+        IFS=$'\n'
+        #for id in $V; do
+        #  [[ "${PkgRequisites[*]}" =~ (^|$'\n')"$id"($'\n'|$) ]] && continue 2
+        #done
+        __find_in_list "${PkgRequisites[*]}" "$V" && continue
+        echo -n " ("; nout "$V"; echo " )"
+      )
+      done
     fi #| sort
   fi
 
