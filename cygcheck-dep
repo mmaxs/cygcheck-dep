@@ -688,8 +688,6 @@ fi
 ## */
 ## */
 
-echo $MaxPkgID
-
 if [ "$opt_treat_setup_ini_as_installed" ]; then
 ## populate ${InstalledPkgs[]} using data from ${PkgName[]} /*
   L="${PkgName[@]@A}"
@@ -728,8 +726,6 @@ else
   done < <(sed '1d; /^\s*$/d' "$installed_db")
 ## */
 fi
-
-echo "${#InstalledPkgs[@]}"
 
 ## print advance warning about extraneous installed packages /*
 [ "$opt_be_more_quiet" ] ||
@@ -808,8 +804,6 @@ for id in "${!PkgObsoletedPkgs[@]}"; do
 done
 ## */
 
-echo "${#ObsoletePkgs[@]}"
-
 ## determine requisites for installed packages /*
 L="${!InstalledPkgs[*]}"
 while [ "$L" ]; do
@@ -869,8 +863,6 @@ while [ "$L" ]; do
   L="$C"
 done
 ## */
-
-echo "${#PkgRequisites[@]}"
 
 ## print advance warning about unknown package names /*
 [ "$opt_be_more_quiet" ] ||
