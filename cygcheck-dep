@@ -35,9 +35,11 @@ Usage:
 Setup diagnostics switches:
   -l              Check for installed packages that are not required by any
                   other installed packages (that are "leaves" in the package
-                  dependency tree). Unless the -O option is specified, this
-                  list also includes obsolete installed packages for which
-                  the corresponding replacing packages are installed.
+                  dependency tree). (Note: unless the -O option is specified,
+                  this list also typically includes obsolete installed
+                  packages for which the corresponding replacement packages
+                  are installed, but <setup.exe> might not recognize such a
+                  packages as "leaves".)
 
   -i              Check for package "islands". "An island" is a group of
                   interdependent packages that require each other (with
@@ -51,14 +53,14 @@ Setup diagnostics switches:
   -b              Show installed packages that have broken or unknown
                   dependencies along with lists of missing required packages
                   for them (which might include not only available but for
-                  some reason not installed dependecies, but also merely
+                  some reason not installed dependencies, but also merely
                   unknown package names).
 
   -m              Show missing required dependencies and installed packages
                   for which they are required.
 
   -o              Show installed packages that are obsoleted by available
-                  replacing package.
+                  replacement package.
 
   -x              Show extraneous installed packages that are not present in
                   Cygwin standard distribution whose dependencies can not
@@ -101,6 +103,16 @@ Run mode options:
                   of the installed packages (e.g. the file from another Cygwin
                   installation on your system).
 
+  -O              Respect obsolete packages:
+                    - when resolving package dependencies, do not replace
+                      obsolete packages in dependency lists with the
+                      corresponding replacement packages;
+                    - for installed obsolete packages do not use replacement
+                      packages as their required dependencies; instead, use
+                      their own normal dependencies;
+                    - for the -S switch, treat obsolete packages as having
+                      been also installed.
+
 <setup.ini> file diagnostics switches:
   -S              Instead of checking through only installed packages, check
                   through the list of all available packages from <setup.ini>
@@ -109,26 +121,14 @@ Run mode options:
                   '_obsolete', unless the -O option is specified) will be
                   treated as if they where installed. Supersedes -s option.
 
-  -O              Respect obsoleted packages when processing -S switch:
-                  treat obsoleted packages as having been also installed
-                  (so this will affect on all setup diagnostics and package
-                  information switches).
-                  -b (When -O option is specified, the list of missing required packages might also contain obsoleted packages.)
-                  -r (With -O option this is the very same list that
-                  specified in "requires:" line in <setup.ini> file for the
-                  PACKAGE. If no -O option is specified, this is the list of
-                  packages that <setup.exe> would install along with the
-                  PACKAGE as its required dependencies.)
-                  -n (Without -O option being specified, obsoleted packages are considered as being not needed for anyone, so resulting in  an empty list.)
-
 Output modifiers:
   -p              While printing package names prefix them with status marks.
                   Status marks are:
                     ?? - unknown package name,
                     ?  - extraneous installed package,
-                    &  - obselete installed package,
+                    &  - obsolete installed package,
                     !  - installed package with broken dependencies,
-                    *  - not installed package (e.g. broken dependency);
+                    *  - not installed package (e.g. a broken dependency);
                   (! and & marks might be juxtaposed).
 
   -q              Be more quiet: suppress any advance warnings.
@@ -195,7 +195,7 @@ declare -a PkgDependants PkgDependants_R
 declare -a InstalledPkgs ExtraneousPkgs
 
 # ${ObsoletePkgs[$id]}
-#     - indexed array to store IDs of obsolete packages, ObsoletePkgs[$id] = (replacing package IDs)
+#     - indexed array to store IDs of obsolete packages, ObsoletePkgs[$id] = (replacement package IDs)
 declare -a ObsoletePkgs
 
 # ${UnknownPkgs[$id]}
