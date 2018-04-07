@@ -1,0 +1,3 @@
+category: Utils
+requires: bash coreutils sed wget bzip2
+sdesc: "Show information on dependencies for installed Cygwin packages"

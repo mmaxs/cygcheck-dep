@@ -1,0 +1,39 @@
+Subject: [ANNOUNCEMENT] cygcheck-dep-3.0-1
+
+Version 3.0-1 of cygcheck-dep has been uploaded.
+
+cygcheck-dep is a bash script for displaying information on dependencies
+for installed Cygwin packages. For example: the information about package
+leaves; packages with broken dependencies; obsolete, and orphaned packages;
+particular package's dependencies; unused dependencies that can be removed
+along with particular package meant for uninstalling. See --help for more
+description.
+
+It can be useful if you are trying to use some Cygwin software, and want to
+keep the Cygwin installation directory clean from unused packages.
+
+
+Changelog since version 2.1-1:
+  * the script is almost completely rewritten to reflect the changes
+    in setup.exe functioning and for clean code;
+  * the legacy code for support of Cygwin Ports collection is dropped;
+  * there are new command options.
+
+--
+
+               *** CYGWIN-ANNOUNCE UNSUBSCRIBE INFO ***
+
+ If you want to unsubscribe from the cygwin-announce mailing list,
+ look at the "List-Unsubscribe: " tag in the email header of this message.
+ Send email to the address specified there. It will be in the format:
+
+   cygwin-announce-unsubscribe-you=yourdomain.com <at> cygwin.com
+
+ If you need more information on unsubscribing, start reading here:
+
+   http://sourceware.org/lists.html#unsubscribe-simple
+
+ Please read *all* of the information on unsubscribing
+ that is available starting at this URL.
+
+
