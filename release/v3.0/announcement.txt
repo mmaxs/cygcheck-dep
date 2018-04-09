@@ -1,6 +1,6 @@
-Subject: [ANNOUNCEMENT] cygcheck-dep-3.0-1
+Subject: [ANNOUNCEMENT] cygcheck-dep-3.0-2
 
-Version 3.0-1 of cygcheck-dep has been uploaded.
+Version 3.0-2 of cygcheck-dep has been uploaded.
 
 cygcheck-dep is a bash script for displaying information on dependencies
 for installed Cygwin packages. For example: the information about package
@@ -9,7 +9,7 @@ particular package's dependencies; unused dependencies that can be removed
 along with particular package meant for uninstalling. See --help for more
 description.
 
-It can be useful if you are trying to use some Cygwin software, and want to
+It can be useful if you are using some Cygwin software, and want to
 keep the Cygwin installation directory clean from unused packages.
 
 
